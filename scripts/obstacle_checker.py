@@ -42,6 +42,20 @@ class ObstacleChecker(Node):
         
         self.get_logger().info(f'Stop distance threshold: {self.stop_distance} m')
 
+    def publih_stop_message(self, frame_id):
+        if self.last_twist_linear_x == 0.0:
+            return
+        
+        if self.obstacle_detected:
+            stop_msg = TwistStamped()
+            stop_msg.header.stamp = self.get_clock().now().to_msg()
+            stop_msg.header.frame_id = frame_id
+            
+            stop_msg.twist.linear.x = 0.0
+            stop_msg.twist.angular.z = self.last_twist_angular_z 
+            self.cmd_vel_publisher.publish(stop_msg)
+            self.get_logger().warn('OBSTACLE! Incoming cmd_vel overridden with STOP command!')
+
     def scan_callback(self, scan: LaserScan):
         """Callback to process laser scan data and detect obstacles."""
         self.obstacle_detected = False
@@ -60,26 +74,14 @@ class ObstacleChecker(Node):
                 self.obstacle_detected = True
                 break
 
-
-        self.get_logger().info(f"{self.last_twist_linear_x}")
-        if self.last_twist_linear_x == 0.0:
-            return
-        
-        if self.obstacle_detected:
-            stop_msg = TwistStamped()
-            stop_msg.header.stamp = self.get_clock().now().to_msg()
-            stop_msg.header.frame_id = scan.header.frame_id
-            
-            stop_msg.twist.linear.x = 0.0
-            stop_msg.twist.angular.z = self.last_twist_angular_z 
-            self.cmd_vel_publisher.publish(stop_msg)
-            self.get_logger().warn('OBSTACLE! Incoming cmd_vel overridden with STOP command!')
-
+        self.publih_stop_message(scan.header.frame_id)
 
     def cmd_vel_callback(self, twist_stamped: TwistStamped):
         """Callback to intercept cmd_vel commands and stop if obstacle detected."""
         self.last_twist_angular_z = twist_stamped.twist.angular.z
         self.last_twist_linear_x = twist_stamped.twist.linear.x
+
+        self.publih_stop_message(twist_stamped.header.frame_id)
 
 
 def main(args=None):
