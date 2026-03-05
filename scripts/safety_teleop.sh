@@ -1,0 +1,1 @@
+python3 ./obstacle_checker.py & python3 ../simple_teleop.py
