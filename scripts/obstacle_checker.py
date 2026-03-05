@@ -7,7 +7,7 @@ from geometry_msgs.msg import TwistStamped
 import math
 
 class ObstacleChecker(Node):
-    def __init__(self):
+    def __init__(self, stop_distance = 0.5, stop_degree = 45, service_queue_size = 10):
         super().__init__('obstacle_checker')
         
         scan_topic = '/scan'
@@ -16,33 +16,34 @@ class ObstacleChecker(Node):
         self.last_twist_angular_z = 0
         self.last_twist_linear_x = 0
 
-        self.stop_distance = 0.5
-        
+        self.stop_distance = stop_distance
+        self.stop_degree = stop_degree
+
         self.subscription = self.create_subscription(
             LaserScan,
             scan_topic,
             self.scan_callback,
-            10
+            service_queue_size
         )
         
         self.cmd_vel_subscription = self.create_subscription(
             TwistStamped,
             cmd_vel_topic,
             self.cmd_vel_callback,
-            10
+            service_queue_size
         )
         
         self.cmd_vel_publisher = self.create_publisher(
             TwistStamped,
             cmd_vel_topic,
-            10
+            service_queue_size
         )
         
         self.obstacle_detected = False
         
         self.get_logger().info(f'Stop distance threshold: {self.stop_distance} m')
 
-    def publih_stop_message(self, frame_id):
+    def publish_stop_message(self, frame_id):
         if self.last_twist_linear_x == 0.0:
             return
         
@@ -65,27 +66,29 @@ class ObstacleChecker(Node):
             if distance == float('inf') or distance < scan.range_min or distance > scan.range_max:
                 continue
             
-            angle = scan.angle_min + (i * scan.angle_increment)
-            
             is_close_to_obstacle = distance <= self.stop_distance
+            
+            angle = scan.angle_min + (i * scan.angle_increment)
             angle_degree = math.degrees(angle)
-            is_rotated_to_obstacle = angle_degree < 90 and angle_degree > -90
+            stop_degree = self.stop_degree
+            is_rotated_to_obstacle = angle_degree < stop_degree and angle_degree > -stop_degree
+            
             if is_close_to_obstacle and is_rotated_to_obstacle:
                 self.obstacle_detected = True
                 break
 
-        self.publih_stop_message(scan.header.frame_id)
+        self.publish_stop_message(scan.header.frame_id)
 
     def cmd_vel_callback(self, twist_stamped: TwistStamped):
         """Callback to intercept cmd_vel commands and stop if obstacle detected."""
         self.last_twist_angular_z = twist_stamped.twist.angular.z
         self.last_twist_linear_x = twist_stamped.twist.linear.x
 
-        self.publih_stop_message(twist_stamped.header.frame_id)
+        self.publish_stop_message(twist_stamped.header.frame_id)
 
 
-def main(args=None):
-    rclpy.init(args=args)
+def main():
+    rclpy.init()
     node = ObstacleChecker()
     
     try:
